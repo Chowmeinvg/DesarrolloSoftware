@@ -1,6 +1,8 @@
 const amqp = require("amqplib");
 const jwt = require("jsonwebtoken");
 const readline = require("readline");
+require('./db'); // Solo importa para asegurar conexión a MongoDB
+const Usuario = require('./models/Usuario'); // Modelo Mongoose
 
 // Función para pedir datos desde consola
 function prompt(question) {
