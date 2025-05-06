@@ -1,14 +1,15 @@
 const amqp = require('amqplib');
 const mongoose = require('mongoose');
-const User = require('./Usuario.js');
 const Usuario = require('./Usuario.js');
+const jwt = require('jsonwebtoken');
 
 mongoose.connect('mongodb://localhost:27017/CourseGenDB').then(() => {
     console.log('MongoDB Connected');
 }).catch(err => console.error('MongoDB Connection Error:', err));
 
-queueNuevoUsuario = 'usuarios_nuevos';
-queueLoginUsuario = 'login_usuarios';
+const queueNuevoUsuario = 'usuarios_nuevos';
+const queueLoginUsuario = 'login_usuarios';
+const JWT_SECRET = 'claveSecreta';
 
 async function consume() {
   // Conexion a RabbitMQ
@@ -22,21 +23,24 @@ async function consume() {
   console.log('[*] Waiting for messages. To exit, press CTRL+C');
   canalNuevoUsuario.consume(queueNuevoUsuario, async (msg) => {
     try {
-      const data = JSON.parse(msg.content.toString());
-       
+      console.log('Mensaje recibido:', msg.content.toString());
+
+      // Decodificar el mensaje recibido
+      const datosDecodificados = jwt.verify(msg.content.toString(), JWT_SECRET, { algorithms: ['HS256'] });
+
       // Mostrar el mensaje recibido
-      console.log('\nNuevo usuario recibido:', data);
+      console.log('\nNuevo usuario recibido:', datosDecodificados);
       
       // Validar el mensaje recibido
-      if (!data.nombre || !data.correo) {
+      if (!datosDecodificados.nombre || !datosDecodificados.correo) {
         throw new Error('Falta llenar campos obligatorios');
       }
 
       // Verificar que el nombre y correo no existan en la base de datos
       const existente = await Usuario.findOne({
         $or: [
-          { nombre: data.nombre },
-          { correo: data.correo }
+          { nombre: datosDecodificados.nombre },
+          { correo: datosDecodificados.correo }
         ]
       });
       
@@ -45,8 +49,8 @@ async function consume() {
       }
 
       // Guardar el nuevo usuario en la base de datos
-      const user = new User(data);
-      await user.save();
+      const usuario = new Usuario(datosDecodificados);
+      await usuario.save();
       console.log('Usuario guardado con exito a MongoDB');
 
       // Ack el mensaje

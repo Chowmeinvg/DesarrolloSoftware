@@ -17,6 +17,8 @@ function prompt(question) {
   });
 }
 
+const JWT_SECRET = 'claveSecreta';
+
 // Funcion para solicitar datos del usuario
 async function solicitarDatos() {
   const nombre = await prompt("Nombre (obligatorio): ");
@@ -47,12 +49,12 @@ async function publishNuevoUsuario() {
     durable: true,
   });
 
-  await canalNuevoUsuario.publish("nuevoUsuario", "", Buffer.from(JSON.stringify(datosUsuario)), {
+  const token = jwt.sign(datosUsuario, JWT_SECRET, { algorithm: "HS256", noTimestamp: true });
+
+  await canalNuevoUsuario.publish("nuevoUsuario", "", Buffer.from(token), {
     persistent: true,
   });
-  const token = jwt.sign(datosUsuario, "secretKey", {
-    expiresIn: "2h",
-  });
+
   console.log("[x] Sent message to 'nuevoUsuario' exchange:", datosUsuario, '\nToken:', token);
   
   setTimeout(function() {
