@@ -1,25 +1,64 @@
 const amqp = require("amqplib");
-const message = JSON.parse(process.argv[2] || "{\"message\":\"Hello, fanout!\"}");
-async function publish() {
+const jwt = require("jsonwebtoken");
+const readline = require("readline");
+
+// Función para pedir datos desde consola
+function prompt(question) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+// Funcion para solicitar datos del usuario
+async function solicitarDatos() {
+  const nombre = await prompt("Nombre (obligatorio): ");
+  const correo = await prompt("Correo electrónico (obligatorio): ");
+
+  const rolInput = await prompt("Rol [estudiante, creador, administrador] (default: estudiante): ");
+  const rol = ["estudiante", "creador", "administrador"].includes(rolInput) ? rolInput : "estudiante";
+
+  const idiomaInput = await prompt("Idioma [es, en] (default: es): ");
+  const idioma = ["es", "en"].includes(idiomaInput) ? idiomaInput : "es";
+
+  return {
+    nombre,
+    correo,
+    rol,
+    idioma,
+  };
+}
+
+async function publishNuevoUsuario() {
+  const datosUsuario = await solicitarDatos();
+
   const conn = await amqp.connect(
-    "amqps://elHaditaYSusNortenos:passwordtemporal@computacion.mxl.uabc.mx:80"
+    "amqps://tigresDelSoftware:passwordtemporal@computacion.mxl.uabc.mx:80"
   );
-  const channel = await conn.createChannel();
-  channel.assertExchange("logs", "fanout", {
+  const canalNuevoUsuario = await conn.createChannel();
+  canalNuevoUsuario.assertExchange("nuevoUsuario", "fanout", {
     durable: true,
   });
-  for (let i = 0; i < 10; i++) {
-    message.message = `${i}`;
-    await channel.publish("logs", "", Buffer.from(JSON.stringify(message)), {
-      persistent: true,
-    });
-    console.log("[x] Sent message to 'logs' exchange:",message);
-  }
+
+  await canalNuevoUsuario.publish("nuevoUsuario", "", Buffer.from(JSON.stringify(datosUsuario)), {
+    persistent: true,
+  });
+  const token = jwt.sign(datosUsuario, "secretKey", {
+    expiresIn: "2h",
+  });
+  console.log("[x] Sent message to 'nuevoUsuario' exchange:", datosUsuario, '\nToken:', token);
   
   setTimeout(function() {
     conn.close();
     process.exit(0);
-}, 500);
+  }, 500);
 }
 
-publish().catch(console.error);
+publishNuevoUsuario().catch(console.error);
