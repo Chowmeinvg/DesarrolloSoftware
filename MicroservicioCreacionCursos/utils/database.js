@@ -1,40 +1,44 @@
 /**
- * Utilidad para conectar a la base de datos MongoDB
+ * Utilidad para conectarse a la base de datos MongoDB
  */
 const mongoose = require('mongoose');
 const dbConfig = require('../config/db.config');
 
 /**
  * Conecta a la base de datos MongoDB
- * @returns {Promise} Promesa que resuelve cuando se conecta a la BD
+ * @returns {Promise<void>} Promesa que se resuelve cuando la conexión es exitosa
  */
-const connectDB = async () => {
+exports.connectDB = async () => {
   try {
-    const conn = await mongoose.connect(dbConfig.url, dbConfig.options);
+    const mongoURI = dbConfig.url;
+    await mongoose.connect(mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      // No incluir opciones relacionadas con transacciones aquí
+    });
     
-    console.log(`MongoDB conectada: ${conn.connection.host}`);
+    // Configurar mongoose para que no use findAndModify deprecated
+    mongoose.set('strictQuery', true);
     
-    // Configurar eventos de la conexión
+    // Añadir listeners para eventos de conexión
     mongoose.connection.on('error', err => {
-      console.error(`Error de conexión a MongoDB: ${err.message}`);
+      console.error('Error de conexión MongoDB:', err);
     });
     
     mongoose.connection.on('disconnected', () => {
-      console.warn('Desconectado de MongoDB');
+      console.warn('La conexión a MongoDB se ha perdido');
     });
     
-    // Manejar señales de terminación para cerrar correctamente la conexión
+    // Manejo de señales para cerrar conexión apropiadamente
     process.on('SIGINT', async () => {
       await mongoose.connection.close();
-      console.log('Conexión a MongoDB cerrada debido a la finalización de la aplicación');
+      console.log('Conexión a MongoDB cerrada debido a terminación del proceso');
       process.exit(0);
     });
     
-    return conn;
+    return mongoose.connection;
   } catch (error) {
-    console.error(`Error al conectar a MongoDB: ${error.message}`);
-    process.exit(1);
+    console.error('Error al conectar a MongoDB:', error.message);
+    throw error;
   }
 };
-
-module.exports = { connectDB };

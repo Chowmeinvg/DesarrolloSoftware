@@ -1,16 +1,15 @@
 /**
  * Servicio para interactuar con la API de OpenAI
  */
-const { OpenAI } = require('openai');
 const axios = require('axios');
 const config = require('../config/openai.config');
 const { model } = require('mongoose');
 
 class AIService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: config.apiKey,
-    });
+    if (!config.apiKey) {
+      throw new Error('No se encontró la API key de DeepSeek en las variables de entorno');
+    }
   }
 
   /**
@@ -19,56 +18,72 @@ class AIService {
    * @returns {Promise<Object>} - Objeto con la estructura del curso generado
    */
 
-async generarContenidoCurso(tituloCurso) {
-  try {
-    console.log(`Solicitando a la IA generar contenido para: "${tituloCurso}"...`);
+  async generarContenidoCurso(tituloCurso) {
+    try {
+      console.log(`Solicitando a la IA generar contenido para: "${tituloCurso}"...`);
 
-    const prompt = this.construirPrompt(tituloCurso);
+      const prompt = this.construirPrompt(tituloCurso);
 
-    const response = await axios.post(
-      `${config.baseURL}/chat/completions`,
-      {
-        model: config.model,
-        messages: [
-          {
-            role: "system",
-            content: "Eres un experto en educación y creación de cursos. Tu tarea es generar el contenido detallado de un curso educativo en formato JSON siguiendo la estructura que se te proporciona."
-          },
-          {
-            role: "user",
-            content: prompt
+      const response = await axios.post(
+        `${config.baseURL}/chat/completions`,
+        {
+          model: config.model,
+          messages: [
+            {
+              role: "system",
+              content: "Eres un experto en educación y creación de cursos. Tu tarea es generar el contenido detallado de un curso educativo en formato JSON siguiendo la estructura que se te proporciona. IMPORTANTE: Proporciona solo el JSON puro sin marcadores de código como ```json o ```."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: config.temperature,
+          max_tokens: config.maxTokens
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`
           }
-        ],
-        temperature: config.temperature,
-        max_tokens: config.maxTokens
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`
         }
+      );
+
+      const choices = response.data.choices;
+      if (!choices || choices.length === 0) {
+        throw new Error('La respuesta de la IA no contiene datos válidos');
       }
-    );
 
-    const choices = response.data.choices;
-    if (!choices || choices.length === 0) {
-      throw new Error('La respuesta de la IA no contiene datos válidos');
+      // Obtener el contenido de la respuesta
+      let content = choices[0].message.content;
+      console.log('Respuesta de la IA:', content);
+
+      // Limpiar el contenido de marcadores de código Markdown
+      content = this.limpiarContenidoJSON(content);
+
+      const contenidoJson = JSON.parse(content);
+      return this.validarEstructuraRespuesta(contenidoJson);
+    } catch (error) {
+      console.error('Error al generar contenido con la IA:', error.message);
+      if (error.response) {
+        console.error('Detalles del error:', error.response.data);
+      }
+      throw new Error(`Error al generar el contenido del curso: ${error.message}`);
     }
-
-    const content = choices[0].message.content;
-    console.log('Respuesta de la IA:', content);
-
-    const contenidoJson = JSON.parse(content);
-    return this.validarEstructuraRespuesta(contenidoJson);
-  } catch (error) {
-    console.error('Error al generar contenido con la IA:', error.message);
-    if (error.response) {
-      console.error('Detalles del error:', error.response.data);
-    }
-    throw new Error(`Error al generar el contenido del curso: ${error.message}`);
   }
-}
 
+  /**
+   * Limpia el contenido de marcadores de código Markdown
+   * @param {string} contenido - Contenido a limpiar
+   * @returns {string} - Contenido limpio
+   */
+  limpiarContenidoJSON(contenido) {
+    // Eliminar los marcadores de código Markdown (```json y ```)
+    return contenido
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*$/g, '')
+      .trim();
+  }
 
   /**
    * Construye el prompt para la IA
