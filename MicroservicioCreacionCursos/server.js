@@ -1,7 +1,7 @@
 /**
- * Archivo principal del servidor
+ * Archivo principal del servidor con dotenv configurado
  */
-require('dotenv').config();
+require('dotenv').config(); // Cargar variables de entorno al inicio
 const express = require('express');
 const { connectDB } = require('./utils/database');
 
@@ -37,7 +37,7 @@ connectDB()
 // Ruta de prueba
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'API del Microservicio de Autenticación',
+    message: 'API del Microservicio de Creación de Cursos',
     status: 'online',
     database: 'MongoDB - creacionCursos'
   });
