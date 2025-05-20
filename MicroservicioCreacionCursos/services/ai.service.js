@@ -2,12 +2,14 @@
  * Servicio para interactuar con la API de OpenAI
  */
 const { OpenAI } = require('openai');
+const axios = require('axios');
 const config = require('../config/openai.config');
+const { model } = require('mongoose');
 
 class AIService {
   constructor() {
     this.openai = new OpenAI({
-      apiKey: config.apiKey
+      apiKey: config.apiKey,
     });
   }
 
@@ -16,13 +18,16 @@ class AIService {
    * @param {string} tituloCurso - Título del curso a generar
    * @returns {Promise<Object>} - Objeto con la estructura del curso generado
    */
-  async generarContenidoCurso(tituloCurso) {
-    try {
-      console.log(`Solicitando a la IA generar contenido para: "${tituloCurso}"...`);
-      
-      const prompt = this.construirPrompt(tituloCurso);
-      
-      const completion = await this.openai.chat.completions.create({
+
+async generarContenidoCurso(tituloCurso) {
+  try {
+    console.log(`Solicitando a la IA generar contenido para: "${tituloCurso}"...`);
+
+    const prompt = this.construirPrompt(tituloCurso);
+
+    const response = await axios.post(
+      `${config.baseURL}/chat/completions`,
+      {
         model: config.model,
         messages: [
           {
@@ -35,25 +40,35 @@ class AIService {
           }
         ],
         temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        response_format: { type: "json_object" }
-      });
-
-      if (!completion.choices || completion.choices.length === 0) {
-        throw new Error('La respuesta de la IA no contiene datos válidos');
+        max_tokens: config.maxTokens
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`
+        }
       }
+    );
 
-      // Obtener el contenido JSON de la respuesta
-      const contenidoJson = JSON.parse(completion.choices[0].message.content);
-      return this.validarEstructuraRespuesta(contenidoJson);
-    } catch (error) {
-      console.error('Error al generar contenido con la IA:', error.message);
-      if (error.response) {
-        console.error('Detalles del error:', error.response.data);
-      }
-      throw new Error(`Error al generar el contenido del curso: ${error.message}`);
+    const choices = response.data.choices;
+    if (!choices || choices.length === 0) {
+      throw new Error('La respuesta de la IA no contiene datos válidos');
     }
+
+    const content = choices[0].message.content;
+    console.log('Respuesta de la IA:', content);
+
+    const contenidoJson = JSON.parse(content);
+    return this.validarEstructuraRespuesta(contenidoJson);
+  } catch (error) {
+    console.error('Error al generar contenido con la IA:', error.message);
+    if (error.response) {
+      console.error('Detalles del error:', error.response.data);
+    }
+    throw new Error(`Error al generar el contenido del curso: ${error.message}`);
   }
+}
+
 
   /**
    * Construye el prompt para la IA
@@ -118,9 +133,9 @@ class AIService {
     Asegúrate de que:
     1. El contenido sea educativo y relevante para el título proporcionado
     2. Las lecciones tengan un orden lógico y progresivo
-    3. Cada lección tenga al menos un recurso asociado
+    3. Cada lección tenga al menos un recurso real asociado y lecturas o material extensas y detalladas de apoyo para el usuario
     4. Los quizzes tengan el mismo número de preguntas y respuestas
-    5. Las URLs sean ficticias pero con formato realista
+    5. Las URLs referenciadas sean válidas y accesibles
     6. La duración esté en formato "horas:minutos"
     
     Genera un curso completo con al menos 5 lecciones y 2 quizzes.
